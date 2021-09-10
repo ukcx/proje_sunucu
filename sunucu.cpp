@@ -8,11 +8,13 @@
 #include <string.h>
 #include <fstream>
 #include "message.h"
+#include "messagePrinter.h"
 
 using namespace std;
 
 constexpr auto MSG_SIZE = 1000;
 int port = 194;
+string path = "C:\\Users\\Administrator\\Desktop\\";
 
 int main()
 {  
@@ -20,7 +22,7 @@ int main()
 
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)  //winsock kutuphanesini baslatmak icin gerekli
     {
-        printf("Winsock baslatilamadi. Error Code : %d", WSAGetLastError());
+        printf("Winsock baslatilamadi. Hata kodu: %d", WSAGetLastError());
         return 1;
     }
 
@@ -35,12 +37,11 @@ int main()
 
     if (soket == INVALID_SOCKET)
     {
-        cerr << "soket olusturulamadi\n";
+        cerr << "Soket olusturulamadi\n";
         return 1;
     }
     else
     {
-        //cout << "soket numarasi: " << soket << endl;
         // Adres bağlama
         if (bind(soket, (sockaddr*)&sunucu_bilgileri, sizeof(sunucu_bilgileri)) < 0) //soket uzerinden iletisim icin sunucu sokete baglaniyor
         {
@@ -50,6 +51,7 @@ int main()
         else
         {
             cout << "Sunucu acildi" << endl;
+
             if (listen(soket, 1) < 0)    //şu anda 1 istemciye izin veriliyor    SOMAXCONN == maximum reasonable value
             {
                 cerr << "Dinleme sirasinda hata olustu." << endl;
@@ -69,93 +71,62 @@ int main()
 
                 if (yeni_soket == INVALID_SOCKET)
                 {
-                    cerr << "accept'te hata olustu." << endl;
+                    cerr << "Istemci kabul ederken hata olustu." << endl;
                     return 1;
                 }
                 else
                 {
-                    //cout << "soket numarasi: " << yeni_soket << endl;
-                    char alinan_mesaj[MSG_SIZE];
-                    memset(&alinan_mesaj, 0, MSG_SIZE);
                     cout << "Sunucu gelen istemcileri kabul asamasinda" << endl;
+                    bool isThereAnotherMessageBeingSent = true;  //sunucunun mesaj almaya devam edip etmedigini takip etmemiz icin
 
-                    if (recv(yeni_soket, alinan_mesaj, MSG_SIZE, 0) < 0) //read, recv ile soket uzerinden mesaji okuyoruz
+                    do
                     {
-                        cout << "\nmesaj ulasmadi" << endl;
-                    }
-                    else
-                    {
-                        //cout << "soket numarasi: " << yeni_soket << endl;
-                        cout << "\nistemciden mesaj ulasti" << endl;
-                        //cout << "alinan mesaj: \n" << alinan_mesaj << endl;
-                        Message* mesaj = stringToMessage(alinan_mesaj);
-                        ofstream yazilacak_dosya;
+                        char alinan_mesaj[MSG_SIZE];
+                        memset(&alinan_mesaj, 0, MSG_SIZE); //eger memset kullanilmazsa alinan_mesaj sadece rastgele karakterlerle dolacaktir
+                                                            //alinan_mesaj MSG_SIZE'dan kisaysa bu problemi cozuyor
 
-                        string path = "C:\\Users\\Administrator\\Desktop\\";
-                        if (mesaj->getPriority() == Low) 
+                        if (recv(yeni_soket, alinan_mesaj, MSG_SIZE, 0) < 0) //read, recv ile soket uzerinden mesaji okuyoruz
                         {
-                            string file_name = "dusuk_oncelikli.txt";
-                            yazilacak_dosya.open(path + file_name, ios::out | ios::app);
-                            if(yazilacak_dosya.is_open())
-                            {
-                                yazilacak_dosya << "Message" << endl;
-                                mesaj->printMessage(yazilacak_dosya);
-                                yazilacak_dosya << endl;
-                            }
-                            else
-                            {
-                                cerr << "dosya acilamadi!!" << endl;
-                            }
-                            yazilacak_dosya.close();
-
-                        }
-                        else if (mesaj->getPriority() == Medium)
-                        {
-                            string file_name = "normal_oncelikli.txt";
-                            yazilacak_dosya.open(path + file_name, ios::out | ios::app);
-                            if (yazilacak_dosya.is_open())
-                            {
-                                yazilacak_dosya << "Message" << endl;
-                                mesaj->printMessage(yazilacak_dosya);
-                                yazilacak_dosya << endl;
-                            }
-                            else
-                            {
-                                cerr << "dosya acilamadi!!" << endl;
-                            }
-                            yazilacak_dosya.close();
-
+                            cout << "\nMesaj ulasmadi" << endl;
+                            isThereAnotherMessageBeingSent = false; //eger artik mesaj ulasmiyorsa istemci kapanmistir
                         }
                         else
                         {
-                            string file_name = "yuksek_oncelikli.txt";
-                            yazilacak_dosya.open(path + file_name, ios::out | ios::app);
-                            if (yazilacak_dosya.is_open())
-                            {
-                                yazilacak_dosya << "Message" << endl;
-                                mesaj->printMessage(yazilacak_dosya);
-                                yazilacak_dosya << endl;
-                            }
-                            else
-                            {
-                                cerr << "dosya acilamadi!!" << endl;
-                            }
-                            yazilacak_dosya.close();
+                            cout << "\nIstemciden mesaj ulasti" << endl;
 
-                        }
+                            string alinan_mesaj_string_hali = alinan_mesaj;
+                            if (alinan_mesaj_string_hali == "stop") //durdurma mesaji gonderilmis
+                            {
+                                cout << "Ama durdurma mesaji" << endl;
+                                isThereAnotherMessageBeingSent = false; //istemci durma mesaji yollamis, daha mesaj gelmeyecek
+                            }
 
-                        if (send(yeni_soket, mesaj->messageToString().c_str(), mesaj->messageToString().length(), 0) < 0)//write, send ile soket uzerine mesaj yaziyoruz
-                        {
-                            cout << "\nistemciye mesaj gonderilemedi" << endl;
+                            else               //normal mesaj gonderilmis
+                            {
+                                Message* mesaj = stringToMessage(alinan_mesaj);
+                                
+                                PrintMessageToFile printer(path, "dusuk_oncelikli.txt", 
+                                    "normal_oncelikli.txt", "yuksek_oncelikli.txt");    //onceliklere gore dosya isimleri
+
+                                printer.printMessage(*mesaj);
+
+                                string success_message = "Basariyla mesajiniz alindi!";
+
+                                if (send(yeni_soket, success_message.c_str(), success_message.length(), 0) < 0)//write, send ile soket uzerine mesaj yaziyoruz
+                                {
+                                    cout << "\nIstemciye mesaj gonderilemedi" << endl;
+                                }
+                                else
+                                {
+                                    cout << "\nIstemciye mesaj gonderildi" << endl;
+                                }
+                            }
                         }
-                        else 
-                        {
-                            cout << "\nistemciye mesaj gonderildi" << endl;
-                        }
-                    }
+                    } while (isThereAnotherMessageBeingSent);   //istemci mesaj gonderdigi surece devam et
                 }
                 closesocket(yeni_soket);
             }
+            
         }
 
     }
