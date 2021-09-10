@@ -4,6 +4,7 @@
 #include "message.h"
 #include <string>
 #include <vector>
+#include <mysql.h>
 using namespace std;
 
 /*
@@ -13,83 +14,63 @@ using namespace std;
 class PrintMessage
 {
 public:
-	virtual void printMessage(Message msg) = 0;
+	virtual void writeMessage(Message msg) = 0;
 };
 
-class PrintMessageToFile :public PrintMessage
+
+
+/*
+* Dosyalarla ilgili islemler icin class
+* verilen path'e dosya adina gore mesaj yazdirabilir
+*/
+class FileOperations : public PrintMessage
 {
 private:
 	string path;				//yazdirilicak dosyanin bulundugu path
-	vector<string> fileNames;	//yazdirilacak dosya isimleri
+
+	vector<string> fileNames;	/*
+								yazdirilacak dosya isimleri, priorityLevel seviyelerine gore siralanmis halde kullanicidan alinmalidir
+								ornek: fileNames[0]'da (eger Low en dusuk degerdeyse) Low oncelik seviyesindeki dosya adi olmalidir
+								her bir priorityLevel ogesi icin 1 dosya adi olmalidir
+								*/
 
 public:
-	PrintMessageToFile(string pathToFolder, string low_priority_fn, string medium_priority_fn, string high_priority_fn);
-	void changeFileNames(string low_priority_fn, string medium_priority_fn, string high_priority_fn);
-	void changePath(string pathToFolder);
-	void printMessage(Message msg);
+	FileOperations(string pathToFolder, vector<string> fNames);		//path ve dosya adlariyla nesneyi olustur
+	bool changeFileNames(vector<string> fNames);					//dosya adlarini degistir
+	void changePath(string pathToFolder);							//path'i degistir
+	void writeMessage(Message msg);									//mesaji kendi oncelik seviyesine gore verilen path'e ve uygun dosya adi olan dosyaya yazdir
 };
 
-/*
-* Mesaji yazdirmak icin yazdirilacak dosya isimleri ve yazdirilacak dosyanin bulunmasinin
-* istendigi path kullanilarak obje olusturulur.
-*/
-PrintMessageToFile::PrintMessageToFile(string pathToFolder, string low_priority_fn, string medium_priority_fn, string high_priority_fn)
-{
-	fileNames.push_back(low_priority_fn);
-	fileNames.push_back(medium_priority_fn);
-	fileNames.push_back(high_priority_fn);
-	path = pathToFolder;
-}
-/*
-* Dosya isimlerini sonradan degistirmek icin kullanilabilecek fonksiyon
-*/
-void PrintMessageToFile::changeFileNames(string low_priority_fn, string medium_priority_fn, string high_priority_fn)
-{
-	fileNames[0] = low_priority_fn;
-	fileNames[1] = medium_priority_fn;
-	fileNames[2] = high_priority_fn;
-}
-/*
-* Dosyanin yazdirilacagi path'i sonradan degistirmek icin kullanilabilecek fonksiyon
-*/
-void PrintMessageToFile::changePath(string pathToFolder)
-{
-	path = pathToFolder;
-}
-/*
-* Interface class'tan gelen fonksiyon.
-* Mesaji oncelik seviyesine gore istenen dosyaya yazdirir.
-*/
-void PrintMessageToFile::printMessage(Message msg)
-{
-	string file_name;
-	if (msg.getPriority() == Low) {
-		file_name = fileNames[0];
-	}
-	else if (msg.getPriority() == Medium) {
-		file_name = fileNames[1];
-	}
-	else {
-		file_name = fileNames[2];
-	}
-
-	ofstream yazilacak_dosya;
-	yazilacak_dosya.open(path + file_name, ios::out | ios::app);
-	if (yazilacak_dosya.is_open())
-	{
-		yazilacak_dosya << "Message" << endl;
-		msg.printMessage(yazilacak_dosya);
-		yazilacak_dosya << endl;
-	}
-	else
-	{
-		cerr << "Dosya acilamadi!!" << endl;
-	}
-	yazilacak_dosya.close();
-}
 
 
-//class PrintMessageToDatabase
+/*
+* Veritabani ile ilgili islemler icin class
+* Verilen veritabaninda uygun tabloya mesaji yazdirabilir
+*/
+class DatabaseOperations : public PrintMessage
+{
+private:
+	const char* host;				//baglanti icin gerekli degiskenler
+	const char* user;
+	const char* password;
+	const char* databaseName;
+	unsigned int port;
+	const char* unix_socket;
+	unsigned long clientflag;
+	MYSQL  mysql_object;			// Islemler icin kullanilacak mysql nesnesi
+	MYSQL* connection;				// Baglanti pointer'i
+
+public:
+	DatabaseOperations(const char* host, const char* user, const char* password, const char* databaseName,
+		unsigned int port, const char* unix_socket, unsigned long clientflag);
+
+	void writeMessage(Message msg);					//dosya adini bulmak icin "message.h" dosyasindaki priority_map'i kullanir
+	bool connectToDatabase();						//veritabanina baglanamazsa false dondurur
+};
+/*bool doesDatabaseExists(string database_name);
+bool createDatabase(string database_name);
+bool createTables();*/
 
 #endif 
+
 

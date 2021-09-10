@@ -4,22 +4,37 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <unordered_map>
 using namespace std;
 
-/*constexpr char LOW[4] = "Low";
-constexpr char MEDIUM[7] = "Medium";
-constexpr char HIGH[5] = "High";*/
+enum priorityLevel { Low, Medium, High };    //ekstra priorityLevel ekleyebilirsiniz
+                                             //priorityLevel seviyeleri index olarak kullanilmistir
+                                             //eger yeni priorityLevel eklenecekse bir degere esitlemeyin
 
-enum priorityLevel { Low, Medium, High };
+//priorityLevel ogeleri uzerinde yapacaginiz degisiklikleri priority_map ve string_map uzerine ekleyin
+
+unordered_map <priorityLevel, string> priority_map = {
+    {Low, "Low"},
+    {Medium, "Medium"},
+    {High, "High"}
+};
+
+unordered_map <string, priorityLevel> string_map = {
+    {"Low", Low },
+    {"Medium", Medium },
+    {"High", High }
+};
 
 class Message
 {
 public:
     Message(string to, string cc, string subject, string body, priorityLevel priority);
-    void printMessage();
-    void printMessage(ofstream&);
-    string messageToString();
-    priorityLevel getPriority();
+
+    void printMessage();                        //mesaji konsola yazdir
+    void printMessage(ofstream&);               //mesaji verilen ofstream ogesi kullanarak yazdir
+    string messageToString();                   //mesaji stringe cevirir    
+    priorityLevel getPriority();                //priority'i direkt dondur
+    string getPriorityInfo();                   //priority'i string halinde dondur
 
 private:
     string to;
@@ -28,10 +43,10 @@ private:
     string body;
     priorityLevel priority;
 
-    string getPriorityInfo();
 };
 
-//MEMBER FONKSIYONLARI
+//MEMBER FONKSIYONLARI**********************************************************************************************
+
 /*
 *Default Message constructor
 */
@@ -49,23 +64,9 @@ Message::Message(string t, string c, string subj, string bdy, priorityLevel prio
 */
 string Message::getPriorityInfo()
 {
-    try
-    {
-        if (this->priority == 0)
-            return "Low";
-        if (this->priority == 1)
-            return "Medium";
-        if (this->priority == 2)
-            return "High";
-        else
-            throw "Bu gecerli bir oncelik seviyesi degil!!";
-    }
-    catch (const char* error_message)
-    {
-        cout << error_message << endl;
-    }
-
+    return priority_map.find(priority)->second; //second (key, value) pair'indeki value'u dondurur
 }
+
 /*
 *Mesaji duzgun sekilde yazdirir.
 */
@@ -106,7 +107,8 @@ priorityLevel Message::getPriority()
     return priority;
 }
 
-//FREE FONSIYONLAR
+//FREE FONSIYONLAR**************************************************************************************************
+
 /*
 *Bu fonksiyon bir string objesi alip onu priorityLevel objesine donusturur.
 priorityLevel sinifi -- enum priorityLevel { Low, Medium, High } -- seklinde tanimlanmistir.
@@ -115,7 +117,7 @@ Buyuk ve kucuk harf kullanimi tolere edilmistir.
 */
 priorityLevel convertStringToPriorityLevel(string str)   //parse 
 {
-    if (str.length() > 1)
+    if (str.length() > 0)
     {
         string temp = "";
         temp += toupper(str[0]);
@@ -123,17 +125,21 @@ priorityLevel convertStringToPriorityLevel(string str)   //parse
         {
             temp += tolower(str[i]);
         }
-        if (temp == "Low")
-            return Low;
-        else if (temp == "Medium")
-            return Medium;
-        else if (temp == "High")
-            return High;
+
+        auto findTemp = string_map.find(temp);
+
+        if (findTemp != string_map.end()) {
+            return findTemp->second;                //second (key, value) pair'indeki value'u dondurur
+        }
         else
+        {
             throw "Bu gecerli bir oncelik seviyesi degil!!";
+        }
     }
     else
+    {
         throw "Bu gecerli bir oncelik seviyesi degil!!";
+    }
 }
 
 /*
