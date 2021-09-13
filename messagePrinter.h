@@ -3,8 +3,8 @@
 
 #include "message.h"
 #include <string>
-#include <vector>
 #include <mysql.h>
+#include <memory>
 using namespace std;
 
 /*
@@ -14,63 +14,93 @@ using namespace std;
 class PrintMessage
 {
 public:
-	virtual void writeMessage(Message msg) = 0;
+	virtual bool writeMessage(Message msg) = 0;
 };
-
 
 
 /*
 * Dosyalarla ilgili islemler icin class
-* verilen path'e dosya adina gore mesaj yazdirabilir
+* verilen path'e ve dosya adina gore mesaj yazdirabilir
 */
-class FileOperations : public PrintMessage
+class SingletonFileOperations : public PrintMessage
 {
+public:
+	void setFileName(string fName);				//dosya adlarini degistir
+	void setPath(string pathToFolder);			//path'i degistir
+	bool writeMessage(Message msg);				//mesaji kendi oncelik seviyesine gore verilen path'e ve uygun dosya adi olan dosyaya yazdir
+
+
+	static SingletonFileOperations* GetInstance()
+	{
+		// Allocate with `new` in case Singleton is not trivially destructible.
+		static unique_ptr<SingletonFileOperations> instance(new SingletonFileOperations());
+		//smart pointer sayesinde new ile olusturulan obje program sona erdiginde silinecek
+
+		if (singleton == nullptr) {
+			singleton = std::move(instance);
+		}
+
+		return singleton.get();
+	}
+
 private:
 	string path;				//yazdirilicak dosyanin bulundugu path
+	string fileName;
 
-	vector<string> fileNames;	/*
-								yazdirilacak dosya isimleri, priorityLevel seviyelerine gore siralanmis halde kullanicidan alinmalidir
-								ornek: fileNames[0]'da (eger Low en dusuk degerdeyse) Low oncelik seviyesindeki dosya adi olmalidir
-								her bir priorityLevel ogesi icin 1 dosya adi olmalidir
-								*/
+	static unique_ptr<SingletonFileOperations> singleton;
 
-public:
-	FileOperations(string pathToFolder, vector<string> fNames);		//path ve dosya adlariyla nesneyi olustur
-	bool changeFileNames(vector<string> fNames);					//dosya adlarini degistir
-	void changePath(string pathToFolder);							//path'i degistir
-	void writeMessage(Message msg);									//mesaji kendi oncelik seviyesine gore verilen path'e ve uygun dosya adi olan dosyaya yazdir
+	SingletonFileOperations() : path(""), fileName("") {};
+
+	// Delete copy/move so extra instances can't be created/moved.
+	SingletonFileOperations(const SingletonFileOperations&) = delete;
+	SingletonFileOperations& operator=(const SingletonFileOperations&) = delete;
+	SingletonFileOperations(SingletonFileOperations&&) = delete;
+	SingletonFileOperations& operator=(SingletonFileOperations&&) = delete;
+
 };
-
 
 
 /*
 * Veritabani ile ilgili islemler icin class
 * Verilen veritabaninda uygun tabloya mesaji yazdirabilir
 */
-class DatabaseOperations : public PrintMessage
+
+class SingletonDatabaseOperations : public PrintMessage
 {
+public:
+	bool writeMessage(Message msg);					//dosya adini bulmak icin "message.h" dosyasindaki priority_map'i kullanir
+	bool checkConnection();
+	bool connectToDatabase(const char* host, const char* user, const char* password,
+		const char* databaseName, unsigned int port, const char* unix_socket,
+		unsigned long clientflag);							//veritabanina baglanamazsa false dondurur
+
+
+	static SingletonDatabaseOperations* GetInstance()
+	{
+		// Allocate with `new` in case Singleton is not trivially destructible.
+		static unique_ptr<SingletonDatabaseOperations> instance(new SingletonDatabaseOperations());
+		//smart pointer sayesinde new ile olusturulan obje program sona erdiginde silinecek
+
+		if (singleton == nullptr)
+			singleton = std::move(instance);
+
+		return singleton.get();
+	}
+
 private:
-	const char* host;				//baglanti icin gerekli degiskenler
-	const char* user;
-	const char* password;
-	const char* databaseName;
-	unsigned int port;
-	const char* unix_socket;
-	unsigned long clientflag;
-	MYSQL  mysql_object;			// Islemler icin kullanilacak mysql nesnesi
+	MYSQL* mysql_object;			// Islemler icin kullanilacak mysql nesnesi
 	MYSQL* connection;				// Baglanti pointer'i
 
-public:
-	DatabaseOperations(const char* host, const char* user, const char* password, const char* databaseName,
-		unsigned int port, const char* unix_socket, unsigned long clientflag);
+	static unique_ptr<SingletonDatabaseOperations> singleton;
 
-	void writeMessage(Message msg);					//dosya adini bulmak icin "message.h" dosyasindaki priority_map'i kullanir
-	bool connectToDatabase();						//veritabanina baglanamazsa false dondurur
+	SingletonDatabaseOperations() : mysql_object(mysql_init(mysql_object)), connection(nullptr) {}
+
+	// Delete copy/move so extra instances can't be created/moved.
+	SingletonDatabaseOperations(const SingletonDatabaseOperations&) = delete;
+	SingletonDatabaseOperations& operator=(const SingletonDatabaseOperations&) = delete;
+	SingletonDatabaseOperations(SingletonDatabaseOperations&&) = delete;
+	SingletonDatabaseOperations& operator=(SingletonDatabaseOperations&&) = delete;
 };
-/*bool doesDatabaseExists(string database_name);
-bool createDatabase(string database_name);
-bool createTables();*/
 
 #endif 
-
 

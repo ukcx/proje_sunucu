@@ -4,46 +4,22 @@
 
 using namespace std;
 
-/*
-* Mesaji yazdirmak icin yazdirilacak dosya isimleri ve yazdirilacak dosyanin bulunmasinin
-* istendigi path kullanilarak obje olusturulur.
-* yazdirilacak dosya isimleri, priorityLevel seviyelerine gore siralanmis halde kullanicidan alinmalidir
-	ornek: fileNames[0]'da (eger Low en dusuk degerdeyse) Low oncelik seviyesindeki dosya adi olmalidir
-	herbir priorityLevel ogesi icin 1 dosya adi olmalidir
-*/
-FileOperations::FileOperations(string pathToFolder, vector<string> fNames)
-{
-	path = pathToFolder;
-	if (fNames.size() != priority_map.size())
-	{
-		throw "Verilen dosya sayisi gereken priority level sayisinda degil!!";
-	}
-	else
-	{
-		fileNames = fNames;
-	}
-}
+unique_ptr<SingletonFileOperations> SingletonFileOperations::singleton = nullptr;
+//singleton variable static oldugu icin hafizada belli bir adrese atanabilmesi icin 1 kez aciklanmasi gerekli
 
 /*
 * Dosya isimlerini sonradan degistirmek icin kullanilabilecek fonksiyon
 */
-bool FileOperations::changeFileNames(vector<string> fNames)
+
+void SingletonFileOperations::setFileName(string fName)
 {
-	if (fNames.size() != priority_map.size())
-	{
-		return false;
-	}
-	else
-	{
-		fileNames = fNames;
-		return true;
-	}
+	fileName = fName;
 }
 
 /*
 * Dosyanin yazdirilacagi path'i sonradan degistirmek icin kullanilabilecek fonksiyon
 */
-void FileOperations::changePath(string pathToFolder)
+void SingletonFileOperations::setPath(string pathToFolder)
 {
 	path = pathToFolder;
 }
@@ -52,22 +28,24 @@ void FileOperations::changePath(string pathToFolder)
 * Interface class'tan gelen fonksiyon.
 * Mesaji oncelik seviyesine gore istenen dosyaya yazdirir.
 */
-void FileOperations::writeMessage(Message msg)
+bool SingletonFileOperations::writeMessage(Message msg)
 {
-	string file_name;
-	file_name = fileNames[msg.getPriority()];
 
 	ofstream yazilacak_dosya;
-	yazilacak_dosya.open(path + file_name, ios::out | ios::app);
+	yazilacak_dosya.open(path + fileName, ios::out | ios::app);
+	//yazdirilacak string'i dosyanin en sonuna ekle ios::app kullanarak
+
 	if (yazilacak_dosya.is_open())
 	{
 		yazilacak_dosya << "Message" << endl;
 		msg.printMessage(yazilacak_dosya);
 		yazilacak_dosya << endl;
+		yazilacak_dosya.close();
+		return true;
 	}
 	else
 	{
-		cerr << "Dosya acilamadi!!" << endl;
+		return false;
 	}
-	yazilacak_dosya.close();
+
 }

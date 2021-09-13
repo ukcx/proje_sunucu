@@ -3,45 +3,40 @@
 
 using namespace std;
 
-/*
-* Default constructor
-* Veritabanina baglanmak icin gerekli bilgileri kullanarak veritabani ogesini olustur
-*/
-DatabaseOperations::DatabaseOperations(const char* h, const char* u, const char* pword, const char* name,
-	unsigned int p, const char* socket, unsigned long flag)
-{
-	host = h;
-	user = u;
-	password = pword;
-	databaseName = name;
-	port = p;
-	unix_socket = socket;
-	clientflag = flag;
-
-	mysql_init(&mysql_object);
-	connection = NULL;
-}
+unique_ptr<SingletonDatabaseOperations> SingletonDatabaseOperations::singleton = nullptr;
+//singleton variable static oldugu icin hafizada belli bir adrese atanabilmesi icin 1 kez aciklanmasi gerekli
 
 /*
 * Veritabanina baglan, eger baglanti basariliysa true dondur, aksi takdirde false dondur
 */
-bool DatabaseOperations::connectToDatabase()
+bool SingletonDatabaseOperations::connectToDatabase(const char* host, const char* user, const char* password,
+	const char* databaseName, unsigned int port, const char* unix_socket, unsigned long clientflag)
 {
-	connection = mysql_real_connect(&mysql_object, host, user, password, databaseName, port, unix_socket, clientflag);
-	if (connection == NULL) // eger baglanti saglanmadiysa
+	connection = mysql_real_connect(mysql_object, host, user, password, databaseName, port, unix_socket, clientflag);
+
+	return checkConnection();
+}
+
+/*
+* Veritabanina baglantiyi kontrol et, baglanti varsa true, yoksa false dondur
+*/
+bool SingletonDatabaseOperations::checkConnection()
+{
+	if (connection == NULL)		// eger baglanti saglanmadiysa
 	{
 		return false;
 	}
-	else					// Baglanti basarili ise
+	else						// Baglanti basarili ise
 	{
 		return true;
 	}
 }
 
 /*
-*
+* Interface class'tan gelen fonksiyon.
+* Mesaji oncelik seviyesine gore veritabanindaki gerekli tabloya yazdirir.
 */
-void DatabaseOperations::writeMessage(Message msg)
+bool SingletonDatabaseOperations::writeMessage(Message msg)
 {
 	string messageAsString = msg.messageToString();
 
@@ -55,9 +50,8 @@ void DatabaseOperations::writeMessage(Message msg)
 	}
 
 	string tableName = msg.getPriorityInfo() + "_priority_messages";		//veritabanindaki tablo adlari
-	string dbName = databaseName;
 
-	string query = "INSERT INTO " + dbName + "." + tableName
+	string query = "INSERT INTO messages." + tableName
 		+ "(message_to, message_cc, message_subject, message_body, message_priority) VALUES("
 		+ "\"" + mesajdaki_bilgiler[0] + "\",\"" + mesajdaki_bilgiler[1] + "\",\"" + mesajdaki_bilgiler[2]
 		+ "\",\"" + mesajdaki_bilgiler[3] + "\",\"" + mesajdaki_bilgiler[4] + "\")";
@@ -66,9 +60,12 @@ void DatabaseOperations::writeMessage(Message msg)
 	if (mysql_query(connection, query.c_str()) == 0)		//verilen sorguyu yurut. Eger dogruysa 0 dondurur.
 	{
 		cout << "Mesaj veritabanina yazdirildi." << endl;
+		return true;
 	}
 	else
 	{
 		cout << "Mesaji veritabanina yazdirirken sorun olustu!" << endl;
+		return false;
 	}
 }
+

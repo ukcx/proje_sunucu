@@ -6,18 +6,221 @@
 #include <winsock2.h>
 #include <iostream>
 #include <string.h>
-#include <fstream>
 #include "message.h"
 #include "messagePrinter.h"
 #include "fileOperations.cpp"
 #include "databaseOperations.cpp"
+#include <queue>
+#include <mutex>
+#include <thread>
+#include <unordered_map>
 
 using namespace std;
 
+struct messageInfo                  //mesajin kendisi ve yazilacagi yeri beraber tutmak icin gereken yapi
+{
+    Message mesaj;
+    string yazdirilacagi_yer;
+    messageInfo(Message& msg, string yer) : mesaj(msg), yazdirilacagi_yer(yer) {}
+};
+
 constexpr auto MSG_SIZE = 1000;
+constexpr auto LOCATION_INFO_SIZE = 20;                     //mesajin kaydedilecegi yerin string olarak max boyutu
 int port = 194;
 string path = "C:\\Users\\Administrator\\Desktop\\";        //dosyalarin oldugu path
+vector<string> fileNames;
+queue <messageInfo> lowPriorityQueue, mediumPriorityQueue, highPriorityQueue;
 
+unordered_map <priorityLevel, queue<messageInfo>> queue_map =
+{
+    {Low, lowPriorityQueue},    //oncelik seviyelerine gore karsilik gelen queue objelerini O(1) zamanda bulmak icin
+    {Medium, mediumPriorityQueue},
+    {High, highPriorityQueue}
+};
+
+int num_of_acceptors_finished = 0;
+bool isThereAnotherMessageBeingSent = true;     //sunucunun mesaj almaya devam edip etmedigini takip etmemiz icin
+std::mutex mesaj_mutex, recv_mutex, send_mutex, database_mutex, file_mutex;
+std::mutex* priorityQueueMutexes[3];            //her bir queue icin ayri mutexler kullanilacak
+
+
+
+void message_acceptor(SOCKET& yeni_soket)
+{
+
+    while (true)                 //istemci mesaj gonderdigi surece devam et
+    {
+        mesaj_mutex.lock();
+        if (!isThereAnotherMessageBeingSent)     //daha mesaj gelmiyor
+        {
+            num_of_acceptors_finished++;        //bu acceptor isini bitirdi
+            break;
+        }
+        mesaj_mutex.unlock();
+
+        char mesaji_yazma_yeri[LOCATION_INFO_SIZE];
+        memset(&mesaji_yazma_yeri, 0, LOCATION_INFO_SIZE);
+
+        char alinan_mesaj[MSG_SIZE];
+        memset(&alinan_mesaj, 0, MSG_SIZE);                 /*eger memset kullanilmazsa alinan_mesaj'in dolmayan kismi
+                                                            sadece rastgele karakterlerle dolacaktir.
+                                                            memset alinan_mesaj MSG_SIZE'dan kisaysa bu problemi cozuyor*/
+
+        recv_mutex.lock();
+        if ((recv(yeni_soket, mesaji_yazma_yeri, LOCATION_INFO_SIZE, 0) < 0) ||
+            (recv(yeni_soket, alinan_mesaj, MSG_SIZE, 0) < 0))     //read, recv ile soket uzerinden mesaji okuyoruz
+        {
+            cout << "\nMesaj ulasmadi" << endl;
+            recv_mutex.unlock();
+
+            mesaj_mutex.lock();
+            isThereAnotherMessageBeingSent = false; //eger artik mesaj ulasmiyorsa istemci kapanmistir
+            mesaj_mutex.unlock();
+        }
+        else
+        {
+            recv_mutex.unlock();
+            cout << "\nIstemciden mesaj ulasti" << endl;
+
+            string mesaj_yeri = mesaji_yazma_yeri;
+            string alinan_mesaj_string_hali = alinan_mesaj;
+
+            if ((mesaj_yeri != "database") && (mesaj_yeri != "file"))    //mesajin nereye yazdirilacagi dogru verilmemis
+            {
+                string fail_message = "Mesajin yazdirilacagi yer yanlis verilmis! Mesaj yazdirilamadi!";
+                cout << fail_message << endl;
+
+                send_mutex.lock();
+                if (send(yeni_soket, fail_message.c_str(), fail_message.length(), 0) < 0)
+                    cout << "\nIstemciye mesaj gonderilemedi" << endl;
+
+                else
+                    cout << "\nIstemciye mesaj gonderildi" << endl;
+
+                send_mutex.unlock();
+            }
+
+            else
+            {
+                Message mesaj = stringToMessage(alinan_mesaj);     //recv ile alinan string'i message objesine donustur
+                messageInfo mesaj_bilgileri(mesaj, mesaj_yeri);    //mesajin kendisi ve yazilan yeri birlikte tutan obje
+                int index = mesaj.getPriority();
+
+                (*priorityQueueMutexes[index]).lock();
+                queue_map.find(mesaj.getPriority())->second.push(mesaj_bilgileri);     //oncelik seviyesine denk gelen queue'e messageInfo objesini ekle
+                (*priorityQueueMutexes[index]).unlock();
+
+            }
+        }
+
+    }
+    mesaj_mutex.unlock();           //loop'tan cikinca mutex'ler kilitli kaldi onlari ac
+
+}
+
+void fetchMessages(SOCKET& yeni_soket, priorityLevel pLevel)
+{
+
+    queue<messageInfo>* queue_for_this_pLevel = &queue_map.find(pLevel)->second;    //islem yapacagimiz queue'i bul
+    SingletonFileOperations* fileOperator;          //islem yapacagimiz fileOperations ogesine pointer
+    SingletonDatabaseOperations* dbOperator;        //islem yapacagimiz databaseOperations ogesine pointer
+
+    while (true)
+    {
+        mesaj_mutex.lock();
+        (*priorityQueueMutexes[pLevel]).lock();         //verilen oncelik seviyesine denk gelen queue'nin mutex'ini kilitle
+
+        if ((num_of_acceptors_finished >= 10) && queue_for_this_pLevel->empty())
+        {
+            break;  //10 acceptor thread islerini bitirmis ve queue de bos, artik bu thread islemleri bitirebilir
+        }
+        mesaj_mutex.unlock();
+
+        if (queue_for_this_pLevel->empty())
+        {
+            (*priorityQueueMutexes[pLevel]).unlock();
+        }
+        else
+        {
+            messageInfo mesaj_bilgileri = queue_for_this_pLevel->front();       //queue'nun en onunden ilk mesaji getir
+            queue_for_this_pLevel->pop();                                       //bu mesaji queue'den cikar
+            (*priorityQueueMutexes[pLevel]).unlock();
+            string success_message = "Basariyla mesajiniz alindi!";
+
+            if (mesaj_bilgileri.yazdirilacagi_yer == "file")
+            {
+                file_mutex.lock();
+
+                cout << "dosyaya yazdirmaya calisiyorum" << endl;
+
+                fileOperator = SingletonFileOperations::GetInstance();          //singleton objesi ile her seferinde ayni objeyi kullan
+                //cout << "SingletonFileOperations adresi: " << fileOperator << endl;
+
+                fileOperator->setFileName(fileNames[pLevel]);
+                fileOperator->setPath(path);
+                if (fileOperator->writeMessage(mesaj_bilgileri.mesaj))      //mesaji dosyaya yazdirmaya calis
+                {
+                    success_message += " Ve dosyaya yazdirildi.";
+                }
+                else
+                {
+                    success_message += "Ancak dosyaya yazdirilamadi!!";
+                }
+                file_mutex.unlock();
+            }
+
+            if (mesaj_bilgileri.yazdirilacagi_yer == "database")
+            {
+                database_mutex.lock();
+
+                cout << "database'e yazdirmaya calisiyorum" << endl;
+                dbOperator = SingletonDatabaseOperations::GetInstance();        //singleton objesi ile her seferinde ayni objeyi kullan
+                //cout << "SingletonDatabaseOperations adresi: " << dbOperator << endl;
+
+                if (!dbOperator->checkConnection())     //database'e daha baglanilmamis
+                {
+                    dbOperator->connectToDatabase("localhost", "root", "password", "messages", 3306, 0, 0); //yalnizca 1 kere kosturulmasi lazim
+                }
+
+                if (dbOperator->checkConnection())
+                {
+                    cout << "Veritabanina baglanildi" << endl;
+                    if (dbOperator->writeMessage(mesaj_bilgileri.mesaj))    //veritabanina mesaji yazdirmaya calis
+                    {
+                        database_mutex.unlock();
+                        success_message += " Ve veritabanina yazdirildi.";
+                    }
+                    else
+                    {
+                        database_mutex.unlock();
+                        success_message += " Ancak veritabanina yazdirilamadi.";
+                    }
+
+                }
+                else
+                {
+                    cout << "Veritabanina baglanilamadi!" << endl;
+                    database_mutex.unlock();
+                    success_message += " Ancak veritabanina yazdirilamadi.";
+                }
+            }
+
+            send_mutex.lock();
+            if (send(yeni_soket, success_message.c_str(), success_message.length(), 0) < 0) //write, send ile soket uzerine mesaj yaziyoruz
+            {
+                cout << "\nIstemciye mesaj gonderilemedi" << endl;
+            }
+            else
+            {
+                cout << "\nIstemciye mesaj gonderildi" << endl;
+            }
+            send_mutex.unlock();
+        }
+    }
+    mesaj_mutex.unlock();
+    (*priorityQueueMutexes[pLevel]).unlock();       //loop'tan cikinca kilitli kalan mutex'leri ac
+
+}
 
 int main()
 {
@@ -65,7 +268,7 @@ int main()
         sockaddr client_addr;   //sadece accept fonksiyonunun calısması icin gerekli gecici variable, sonradan kullanilmayacak
         client_len = sizeof(client_addr);
 
-        SOCKET yeni_soket;      /*accept fonksiyonu ile yeni soket acilacak ve mesaj transferi bu soket uzerinden gerceklesecektir.
+        SOCKET yeni_soket;      /*accept fonksiyonu ile yeni soket acilacak ve mesaj transferi bu soket uzerinden gerceklesecek
                                 Eski soket baska istemcileri kabul etmek icin kullanilacaktir*/
 
         yeni_soket = accept(soket, (sockaddr*)&client_addr, &client_len);
@@ -77,100 +280,49 @@ int main()
 
         cout << "Sunucu gelen istemcileri kabul asamasinda" << endl;  //buraya gelindiyse hicbir throw komutu calismamistir
 
-        bool isThereAnotherMessageBeingSent = true;  //sunucunun mesaj almaya devam edip etmedigini takip etmemiz icin
-        string whereToPrintMessage = "";
+        fileNames.push_back("dusuk_oncelikli.txt");
+        fileNames.push_back("normal_oncelikli.txt");            //onceliklere gore dosya isimleri
+        fileNames.push_back("yuksek_oncelikli.txt");
 
-        do
+        mutex low_mutex, medium_mutex, high_mutex;        //onceliklere gore mutexler
+        priorityQueueMutexes[0] = &low_mutex;
+        priorityQueueMutexes[1] = &medium_mutex;          //bu mutex'leri priorityQueueMutexes ile oncelik seviyesine gore index kullanarak tut
+        priorityQueueMutexes[2] = &high_mutex;
+
+
+        vector<thread> acceptor_thread_pool;
+
+        for (int i = 0; i < 10; i++)                //10 acceptor thread olustur
         {
-            char alinan_mesaj[MSG_SIZE];
-            memset(&alinan_mesaj, 0, MSG_SIZE); /*eger memset kullanilmazsa alinan_mesaj'in dolmayan kismi
-                                                sadece rastgele karakterlerle dolacaktir.
-                                                memset alinan_mesaj MSG_SIZE'dan kisaysa bu problemi cozuyor*/
+            acceptor_thread_pool.push_back(thread(message_acceptor, std::ref(yeni_soket)));
+        }
 
-            if (recv(yeni_soket, alinan_mesaj, MSG_SIZE, 0) < 0) //read, recv ile soket uzerinden mesaji okuyoruz
+        vector<thread> processor_thread_pool;
+        for (int i = 0; i < 12; i++)                //12 processor thread olustur      //6 high, 4 medium, 2 low
+        {
+            if (i < 6)   //yeni_soket'i referansla gonder
             {
-                cout << "\nMesaj ulasmadi" << endl;
-                isThereAnotherMessageBeingSent = false; //eger artik mesaj ulasmiyorsa istemci kapanmistir
+                processor_thread_pool.push_back(thread(fetchMessages, std::ref(yeni_soket), High));
+            }
+            else if (i < 10)
+            {
+                processor_thread_pool.push_back(thread(fetchMessages, std::ref(yeni_soket), Medium));
             }
             else
             {
-                cout << "\nIstemciden mesaj ulasti" << endl;
-
-                string alinan_mesaj_string_hali = alinan_mesaj;
-                if (alinan_mesaj_string_hali == "stop")                     //durdurma mesaji gonderilmis
-                {
-                    cout << "Ama durdurma mesaji" << endl;
-                    isThereAnotherMessageBeingSent = false;             //istemci durma mesaji yollamis, daha mesaj gelmeyecek
-                }
-                else if (alinan_mesaj_string_hali == "database")            //istemci database'e yazdirmak istiyor
-                {
-                    whereToPrintMessage = "database";
-                }
-                else if (alinan_mesaj_string_hali == "file")                //istemci file'a yazdirmak istiyor
-                {
-                    whereToPrintMessage = "file";
-                }
-                else if (whereToPrintMessage == "")      //mesajin nereye yazdirilacagi verilmemis
-                {
-                    string fail_message = "Mesajin yazdirilacagi yer verilmemis! Mesaj yazdirilamadi!";
-
-                    cout << fail_message << endl;
-
-                    if (send(yeni_soket, fail_message.c_str(), fail_message.length(), 0) < 0)
-                        cout << "\nIstemciye mesaj gonderilemedi" << endl;
-
-                    else
-                        cout << "\nIstemciye mesaj gonderildi" << endl;
-
-                }
-                else               //normal mesaj gonderilmis ve mesajin yazdirilacagi yer onceden dogru verilmis
-                {
-                    Message* mesaj = stringToMessage(alinan_mesaj);
-
-                    string success_message = "Basariyla mesajiniz alindi!";
-
-                    if (whereToPrintMessage == "file")
-                    {
-                        vector<string> fileNames;
-                        fileNames.push_back("dusuk_oncelikli.txt");
-                        fileNames.push_back("normal_oncelikli.txt");            //onceliklere gore dosya isimleri
-                        fileNames.push_back("yuksek_oncelikli.txt");
-
-                        FileOperations printer(path, fileNames);
-
-                        printer.writeMessage(*mesaj);
-                        success_message += " Ve dosyaya yazdirildi.";
-                    }
-
-                    if (whereToPrintMessage == "database")
-                    {
-                        DatabaseOperations dbOperator("localhost", "root", "password", "messages", 3306, 0, 0);
-
-                        if (dbOperator.connectToDatabase())     //veritabanina baglanildi
-                        {
-                            cout << "Veritabanina baglanildi" << endl;
-                            dbOperator.writeMessage(*mesaj);
-                            success_message += " Ve veritabanina yazdirildi.";
-                        }
-                        else
-                        {
-                            cout << "Veritabanina baglanilamadi!" << endl;
-                            success_message += " Ancak veritabanina yazdirilamadi.";
-                        }
-                    }
-
-                    whereToPrintMessage = "";       //sonraki mesajin yazdirilicagi yeri sifirla
-
-                    if (send(yeni_soket, success_message.c_str(), success_message.length(), 0) < 0) //write, send ile soket uzerine mesaj yaziyoruz
-                        cout << "\nIstemciye mesaj gonderilemedi" << endl;
-
-                    else
-                        cout << "\nIstemciye mesaj gonderildi" << endl;
-
-                }
+                processor_thread_pool.push_back(thread(fetchMessages, std::ref(yeni_soket), Low));
             }
+        }
 
-        } while (isThereAnotherMessageBeingSent);   //istemci mesaj gonderdigi surece devam et
+
+        for (int i = 0; i < 10; i++)                //butun threadler join
+        {
+            acceptor_thread_pool[i].join();
+        }
+        for (int i = 0; i < 12; i++)                //butun threadler join
+        {
+            processor_thread_pool[i].join();
+        }
 
         closesocket(yeni_soket);
         closesocket(soket);
