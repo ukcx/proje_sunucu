@@ -148,7 +148,7 @@ Verilen string "to + \n + cc + \n + subject + \n + body + \n + priority + \n"
 seklinde olusturulmus olmalidir.
 messageToString() member fonksiyonunun tersidir.
 */
-Message* stringToMessage(string msg)
+Message stringToMessage(string msg)
 {
     string info[5] = { "", "", "", "", "" };
 
@@ -163,7 +163,7 @@ Message* stringToMessage(string msg)
         }
     }
 
-    Message* message = new Message(info[0], info[1], info[2], info[3], convertStringToPriorityLevel(info[4]));
+    Message message(info[0], info[1], info[2], info[3], convertStringToPriorityLevel(info[4]));
 
     return message;
 }
