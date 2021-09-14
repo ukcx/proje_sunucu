@@ -1,5 +1,5 @@
 
-#include "messagePrinter.h"
+#include "fileOperations.h"
 #include <string>
 
 using namespace std;
@@ -32,9 +32,9 @@ bool SingletonFileOperations::writeMessage(Message msg)
 {
 
 	ofstream yazilacak_dosya;
-	yazilacak_dosya.open(path + fileName, ios::out | ios::app);
-	//yazdirilacak string'i dosyanin en sonuna ekle ios::app kullanarak
-
+	yazilacak_dosya.open(path + fileName, ios::out | ios::app);	
+			//yazdirilacak string'i dosyanin en sonuna ekle ios::app kullanarak
+	
 	if (yazilacak_dosya.is_open())
 	{
 		yazilacak_dosya << "Message" << endl;

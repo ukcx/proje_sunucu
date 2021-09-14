@@ -38,7 +38,7 @@ public:
 
 private:
     string to;
-    string cc;
+    string cc;   
     string subject;
     string body;
     priorityLevel priority;
@@ -51,7 +51,7 @@ private:
 *Default Message constructor
 */
 Message::Message(string t, string c, string subj, string bdy, priorityLevel prio)
-{
+{    
     to = t;
     cc = c;
     subject = subj;
@@ -82,7 +82,7 @@ void Message::printMessage()
 /*
 *Mesaji duzgun sekilde verilen dosyaya yazdirir.
 */
-void Message::printMessage(ofstream& file_descriptor)
+void Message::printMessage(ofstream &file_descriptor) 
 {
     file_descriptor << "To: " << this->to << endl;
     file_descriptor << "Cc: " << this->cc << endl;
@@ -131,9 +131,9 @@ priorityLevel convertStringToPriorityLevel(string str)   //parse
         if (findTemp != string_map.end()) {
             return findTemp->second;                //second (key, value) pair'indeki value'u dondurur
         }
-        else
+        else 
         {
-            throw "Bu gecerli bir oncelik seviyesi degil!!";
+             throw "Bu gecerli bir oncelik seviyesi degil!!";
         }
     }
     else
@@ -144,7 +144,7 @@ priorityLevel convertStringToPriorityLevel(string str)   //parse
 
 /*
 *Bu fonksiyon bir string objesi alip onu Message objesine donusturur.
-Verilen string "to + \n + cc + \n + subject + \n + body + \n + priority + \n"
+Verilen string "to + \n + cc + \n + subject + \n + body + \n + priority + \n" 
 seklinde olusturulmus olmalidir.
 messageToString() member fonksiyonunun tersidir.
 */

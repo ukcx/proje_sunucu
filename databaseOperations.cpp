@@ -1,5 +1,5 @@
 
-#include "messagePrinter.h"
+#include "databaseOperations.h"
 
 using namespace std;
 
@@ -13,7 +13,7 @@ bool SingletonDatabaseOperations::connectToDatabase(const char* host, const char
 	const char* databaseName, unsigned int port, const char* unix_socket, unsigned long clientflag)
 {
 	connection = mysql_real_connect(mysql_object, host, user, password, databaseName, port, unix_socket, clientflag);
-
+	
 	return checkConnection();
 }
 
@@ -45,15 +45,15 @@ bool SingletonDatabaseOperations::writeMessage(Message msg)
 	int len = messageAsString.length();
 	for (int i = 0; i < 5; i++)				//mesajin icerisindeki bilgileri parca parca mesajdaki_bilgiler'e aktar
 	{
-		mesajdaki_bilgiler[i] = mesajin_kalan_kismi.substr(0, mesajin_kalan_kismi.find('\n'));
-		mesajin_kalan_kismi = mesajin_kalan_kismi.substr(mesajin_kalan_kismi.find('\n') + 1, len);
+		mesajdaki_bilgiler[i] = mesajin_kalan_kismi.substr( 0, mesajin_kalan_kismi.find('\n'));
+		mesajin_kalan_kismi = mesajin_kalan_kismi.substr(mesajin_kalan_kismi.find('\n') + 1 , len);
 	}
 
 	string tableName = msg.getPriorityInfo() + "_priority_messages";		//veritabanindaki tablo adlari
 
 	string query = "INSERT INTO messages." + tableName
-		+ "(message_to, message_cc, message_subject, message_body, message_priority) VALUES("
-		+ "\"" + mesajdaki_bilgiler[0] + "\",\"" + mesajdaki_bilgiler[1] + "\",\"" + mesajdaki_bilgiler[2]
+		+ "(message_to, message_cc, message_subject, message_body, message_priority) VALUES(" 
+		+ "\"" + mesajdaki_bilgiler[0] + "\",\"" + mesajdaki_bilgiler[1] + "\",\"" + mesajdaki_bilgiler[2] 
 		+ "\",\"" + mesajdaki_bilgiler[3] + "\",\"" + mesajdaki_bilgiler[4] + "\")";
 
 
@@ -68,4 +68,3 @@ bool SingletonDatabaseOperations::writeMessage(Message msg)
 		return false;
 	}
 }
-
