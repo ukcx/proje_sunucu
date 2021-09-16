@@ -11,7 +11,7 @@
 #include <string.h>
 #include "message.h"
 
-constexpr auto MSG_SIZE = 1000;
+constexpr auto MAX_MSG_SIZE = 1000;
 
 class ServerOperations
 {
@@ -28,10 +28,9 @@ public:
 private:
     SOCKET createSocket();
 
-    WSADATA wsa;
     SOCKET server_socket;
-    string server_address;
-    sockaddr_in server_addr;
+    string server_ip_address;
+    sockaddr_in server_information;
     int port;
 };
 
@@ -45,12 +44,15 @@ ServerOperations::~ServerOperations()
 
 bool ServerOperations::initializeSocket(string address, int p)
 {
+    WSADATA wsa;
     if (WSAStartup(MAKEWORD(2, 2), &wsa) != 0)
         return false;
 
-    server_address = address;
+    server_ip_address = address;
     port = p;
+    
     server_socket = createSocket();
+    
     if (server_socket == INVALID_SOCKET)
         return false;
 
@@ -59,10 +61,10 @@ bool ServerOperations::initializeSocket(string address, int p)
 
 SOCKET ServerOperations::createSocket()
 {
-    memset(&server_addr, 0, sizeof(server_addr));
-    server_addr.sin_family = AF_INET;                                  //IPv4
-    server_addr.sin_addr.s_addr = inet_addr(server_address.c_str());   //sunucu IP adresi
-    server_addr.sin_port = htons(port);
+    memset(&server_information, 0, sizeof(server_information));
+    server_information.sin_family = AF_INET;                                  //IPv4
+    server_information.sin_addr.s_addr = inet_addr(server_ip_address.c_str());   //sunucu IP adresi
+    server_information.sin_port = htons(port);
 
     return socket(AF_INET, SOCK_STREAM, 0);     //SOCK_STREAM TCP/IP protokolune uygun olan sabit
 }
@@ -80,7 +82,7 @@ bool ServerOperations::listenSocket(int maxNumOfClients)
 
 bool ServerOperations::bindServer()
 {
-    if (bind(server_socket, (sockaddr*)&server_addr, sizeof(server_addr)) < 0) //soket uzerinden iletisim icin sunucu sokete baglaniyor
+    if (bind(server_socket, (sockaddr*)&server_information, sizeof(server_information)) < 0) //soket uzerinden iletisim icin sunucu sokete baglaniyor
     {
         return false;
     }
@@ -110,11 +112,11 @@ bool ServerOperations::sendMessage(SOCKET socket, string msg)
 
 bool ServerOperations::receiveMessage(SOCKET socket, string &msg)
 {
-    char received_message[MSG_SIZE];
-    memset(&received_message, 0, MSG_SIZE);                 //eger memset kullanilmazsa alinan_mesaj'in dolmayan kismi
+    char received_message[MAX_MSG_SIZE];
+    memset(&received_message, 0, MAX_MSG_SIZE);                 //eger memset kullanilmazsa alinan_mesaj'in dolmayan kismi
                                                             //sadece rastgele karakterlerle dolacaktir.
                                                             //memset alinan_mesaj MSG_SIZE'dan kisaysa bu problemi cozuyor
-    if (recv(socket, received_message, MSG_SIZE, 0) < 0)
+    if (recv(socket, received_message, MAX_MSG_SIZE, 0) < 0)
     {
         return false;
     }

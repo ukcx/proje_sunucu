@@ -38,6 +38,11 @@ bool SingletonDatabaseOperations::checkConnection()
 */
 bool SingletonDatabaseOperations::writeMessage(Message msg)
 {
+	if(connection == nullptr)
+	{
+		return false;
+	}
+
 	string messageAsString = msg.messageToString();
 
 	string mesajdaki_bilgiler[5];

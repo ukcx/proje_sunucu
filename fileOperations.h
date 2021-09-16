@@ -4,7 +4,6 @@
 #include "writeMessage.h"
 #include "message.h"
 #include <string>
-#include <mysql.h>
 #include <memory>
 using namespace std;
 
