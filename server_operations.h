@@ -62,7 +62,7 @@ bool ServerOperations::initializeSocket(string address, int p)
 SOCKET ServerOperations::createSocket()
 {
     memset(&server_information, 0, sizeof(server_information));
-    server_information.sin_family = AF_INET;                                  //IPv4
+    server_information.sin_family = AF_INET;                                     //IPv4
     server_information.sin_addr.s_addr = inet_addr(server_ip_address.c_str());   //sunucu IP adresi
     server_information.sin_port = htons(port);
 

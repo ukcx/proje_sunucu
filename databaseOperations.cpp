@@ -12,6 +12,8 @@ unique_ptr<SingletonDatabaseOperations> SingletonDatabaseOperations::singleton =
 bool SingletonDatabaseOperations::connectToDatabase(const char* host, const char* user, const char* password,
 	const char* databaseName, unsigned int port, const char* unix_socket, unsigned long clientflag)
 {
+	connection = nullptr;
+
 	connection = mysql_real_connect(mysql_object, host, user, password, databaseName, port, unix_socket, clientflag);
 	
 	return checkConnection();
