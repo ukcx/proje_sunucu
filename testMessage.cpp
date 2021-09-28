@@ -1,6 +1,5 @@
 #include "gtest/gtest.h"
 #include "message.h"
-//initializerlar icin test yazmadim
 
 TEST(MessageTests, getPriorityTest)
 {
@@ -42,7 +41,7 @@ TEST(MessageTests, messageToStringTest)
 	ASSERT_EQ(msg.messageToString(), "t\nc\ns\nb\nMedium\n");
 }
 
-TEST(MessageTests, convertStringToPriorityLevelTest)
+TEST(MessageTests, convertStringToPriorityLevelTest_whenThrowsException)
 {
 	string pLevel = "random string";
 	EXPECT_THROW({
@@ -55,6 +54,13 @@ TEST(MessageTests, convertStringToPriorityLevelTest)
 			throw;
 		}
 		}, const char*);
+}
+
+TEST(MessageTests, convertStringToPriorityLevelTest_whenInputIsCorrect)
+{
+	string pLevel_2 = "low";	//the convertStringToPriorityLevelTest function checks the values case insensitive
+
+	ASSERT_EQ(convertStringToPriorityLevel(pLevel_2), Low);
 }
 
 TEST(MessageTests, stringToMessageTest)		//tam test edilemedi

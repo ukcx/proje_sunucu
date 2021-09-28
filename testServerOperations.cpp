@@ -13,30 +13,6 @@ TEST(ServerOperationsTest, InitializeSocketTest)
 	//we should be able to initialize our socket
 }
 
-TEST(ServerOperationsTest, InitializeSocket_withInvalidIpAddressTest)
-{
-	//ServerOperations serverTester;
-
-	ASSERT_TRUE(serverTester.initializeSocket("random string", 194));	//this won't give error since socket is technically still created, but we can not do anything with this socket
-}
-
-TEST(ServerOperationsTest, bindServerTest)
-{
-	ServerOperations server;
-
-	ASSERT_FALSE(server.bindServer()) 
-		<< "\nwe are binded to a server when socket is not initialized\n";	
-	//we shouldn't be able to bind this server since we didn't initialize it
-}
-
-TEST(ServerOperationsTest, bindServerTest_withIncorrectInitialization)
-{
-	//ServerOperations serverTester;
-	serverTester.initializeSocket("random string", 194);
-	ASSERT_FALSE(serverTester.bindServer()) 
-		<< "\nwe are binded to a server when server ip address is invalid\n";	
-}
-
 TEST(ServerOperationsTest, bindServerTest_withCorrectInitialization)
 {
 	//ServerOperations serverTester;
@@ -92,3 +68,29 @@ TEST(ServerOperationsTest, sendMessageTest)
 	ASSERT_TRUE(serverTester.sendMessage(acceptedClientSocket, messageToSend)) 
 		<< "\nCan not send any feedback to the client. sendMessage did not work\n";
 }
+
+/*
+TEST(ServerOperationsTest, InitializeSocket_withInvalidIpAddressTest)
+{
+	//ServerOperations serverTester;
+
+	ASSERT_TRUE(serverTester.initializeSocket("random string", 194));	//this won't give error since socket is technically still created, but we can not do anything with this socket
+}
+TEST(ServerOperationsTest, bindServerTest)
+{
+	ServerOperations server;
+
+	ASSERT_FALSE(server.bindServer())
+		<< "\nwe are binded to a server when socket is not initialized\n";
+	//we shouldn't be able to bind this server since we didn't initialize it
+}
+TEST(ServerOperationsTest, bindServerTest_withIncorrectInitialization)
+{
+	//ServerOperations serverTester;
+	serverTester.initializeSocket("random string", 194);
+	ASSERT_FALSE(serverTester.bindServer())
+		<< "\nwe are binded to a server when server ip address is invalid\n";
+}
+
+
+*/
